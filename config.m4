@@ -85,7 +85,10 @@ if test "$PHP_PDO_CUBRID" != "no"; then
   
     PHP_SUBST(PDO_CUBRID_SHARED_LIBADD)
 
-    if test "$PHP_MAJOR_VERSION" = "7"; then
+    if test "$PHP_MAJOR_VERSION" = "8"; then
+        AC_MSG_NOTICE([Using PHP 8.x source files: pdo_cubrid8.c cubrid_driver8.c cubrid_statement8.c])
+        PHP_NEW_EXTENSION(pdo_cubrid, pdo_cubrid8.c cubrid_driver8.c cubrid_statement8.c, $ext_shared,,-I$pdo_inc_path -I)
+    elif test "$PHP_MAJOR_VERSION" = "7"; then
         PHP_NEW_EXTENSION(pdo_cubrid, pdo_cubrid.c cubrid_driver7.c cubrid_statement7.c, $ext_shared,,-I$pdo_inc_path -I)
     else
         PHP_NEW_EXTENSION(pdo_cubrid, pdo_cubrid.c cubrid_driver.c cubrid_statement.c, $ext_shared,,-I$pdo_inc_path -I)
