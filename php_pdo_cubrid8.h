@@ -19,10 +19,12 @@
 #ifndef PHP_PDO_CUBRID8_H
 #define PHP_PDO_CUBRID8_H
 
-/* The PDO driver API changed incompatibly in PHP 8.1 (zend_string based
- * preparer/doer/quoter, zval based get_col). PHP 8.0 is not supported. */
-#if PHP_VERSION_ID < 80100
-#error "pdo_cubrid for PHP 8 requires PHP 8.1 or later"
+/* Supported PHP versions: 8.3 or later on Linux, 8.4 or later on Windows. */
+#if PHP_VERSION_ID < 80300
+#error "pdo_cubrid requires PHP 8.3 or later"
+#endif
+#if defined(PHP_WIN32) && PHP_VERSION_ID < 80400
+#error "pdo_cubrid requires PHP 8.4 or later on Windows"
 #endif
 
 extern zend_module_entry pdo_cubrid_module_entry;

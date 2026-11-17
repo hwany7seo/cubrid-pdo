@@ -3,7 +3,7 @@
 # Build the CUBRID PDO driver out of the source tree.
 #
 #   ./build.sh <ver> [options]   ->  build_<ver>/modules/pdo_cubrid.so
-#       ver: 74 (cubrid_driver7.c), 83, 84, 85 (cubrid_driver8.c)
+#       ver: 83, 84, 85 (PHP 8.3 or later)
 #
 # Options
 #   --php-config PATH   php-config of the target PHP
@@ -31,7 +31,7 @@ root_dir=$(cd "$(dirname "$0")" && pwd)
 
 target=$1
 case "$target" in
-    74|83|84|85) ;;
+    83|84|85) ;;
     *) usage ;;
 esac
 shift

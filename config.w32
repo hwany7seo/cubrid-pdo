@@ -4,6 +4,12 @@
 ARG_WITH("pdo-cubrid", "PDO_CUBRID support", "no");
 
 if (PHP_PDO_CUBRID != "no") {
+  // Supported PHP versions on Windows: 8.4 or later
+  if (typeof(PHP_VERSION) != "undefined" && typeof(PHP_MINOR_VERSION) != "undefined" &&
+      parseInt(PHP_VERSION, 10) * 100 + parseInt(PHP_MINOR_VERSION, 10) < 804) {
+    ERROR("pdo_cubrid requires PHP 8.4 or later on Windows");
+  }
+
   pdo_cubrid_lib_paths = "";
   pdo_cubrid_include_paths = "";
   if (typeof(PHP_PHP_BUILD) != "undefined" && PHP_PHP_BUILD != "no") {
@@ -18,13 +24,7 @@ if (PHP_PDO_CUBRID != "no") {
 
   if (CHECK_LIB("cascci.lib", "pdo_cubrid", pdo_cubrid_lib_paths) &&
       CHECK_HEADER_ADD_INCLUDE("cas_cci.h", "CFLAGS_PDO_CUBRID", pdo_cubrid_include_paths)) {
-    if (PHP_VERSION >= 8) {
-      EXTENSION("pdo_cubrid", "pdo_cubrid8.c cubrid_driver8.c cubrid_statement8.c");
-    } else if (PHP_VERSION >= 7) {
-      EXTENSION("pdo_cubrid", "pdo_cubrid.c cubrid_driver7.c cubrid_statement7.c");
-    } else {
-      EXTENSION("pdo_cubrid", "pdo_cubrid.c cubrid_driver.c cubrid_statement.c");
-    }
+    EXTENSION("pdo_cubrid", "pdo_cubrid8.c cubrid_driver8.c cubrid_statement8.c");
     ADD_FLAG("CFLAGS_PDO_CUBRID", "/D WINDOWS");
     AC_DEFINE('HAVE_PDO_CUBRID', 1, 'Have PDO_CUBRID library');
     ADD_EXTENSION_DEP('pdo_cubrid', 'pdo');
