@@ -9,3 +9,6 @@
 /tests_8x/*.sh
 !/tests_8x/run-tests.php
 !/tests_8x/run_tests.sh
+
+#ignore
+.vscode/

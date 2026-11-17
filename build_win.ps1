@@ -71,6 +71,18 @@ $CciOut = Join-Path $WinRoot 'cci'
 $BuildDir = Join-Path $WinRoot "$Target-$Flavor"
 $PhpSdkTag = 'php-sdk-2.9.0'
 
+# The script changes the environment of the calling session (vcvars64.bat, PATH).
+# Restore it at the end so that repeated runs in the same terminal do not keep
+# growing PATH, INCLUDE and LIB ("The input line is too long").
+$SavedEnv = @{}
+Get-ChildItem env: | ForEach-Object { $SavedEnv[$_.Name] = $_.Value }
+
+function Restore-Env {
+    @(Get-ChildItem env: | Where-Object { -not $SavedEnv.ContainsKey($_.Name) }) |
+        ForEach-Object { Remove-Item -Path "env:$($_.Name)" }
+    foreach ($name in $SavedEnv.Keys) { Set-Item -Path "env:$name" -Value $SavedEnv[$name] }
+}
+
 function Invoke-Checked {
     param([string]$Exe, [string[]]$Arguments)
     Write-Host "> $Exe $($Arguments -join ' ')"
@@ -88,7 +100,9 @@ function Import-VsEnv {
     if (-not $vs) { throw "Visual Studio 2022 (vs17) with the C++ x64 tools not found." }
     $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
     Write-Host "Visual Studio: $vs"
-    cmd /c "`"$vcvars`" >nul && set" | ForEach-Object {
+    # 2>&1: vcvars64.bat may print warnings to stderr, which PowerShell 5.1 turns into
+    # a terminating error under $ErrorActionPreference = 'Stop' when output is redirected.
+    cmd /c "`"$vcvars`" >nul 2>&1 && set" | ForEach-Object {
         if ($_ -match '^([^=]+)=(.*)$') { Set-Item -Path "env:$($Matches[1])" -Value $Matches[2] }
     }
     if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) { throw "cl.exe not found after vcvars64.bat" }
@@ -162,92 +176,98 @@ function Build-Cci {
     Write-Host "CCI: $CciOut"
 }
 
-if ($Clean) {
-    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $BuildDir, $CciBuild, $CciOut
-}
-
-Import-VsEnv
-
-# PHP devel pack and binary
-$pkgFlavor = if ($ThreadSafe) { '' } else { 'nts-' }
-$develZip = $null
-$phpZip = $null
-if (-not $DevelPack -or -not $PhpDir) {
-    if ($PhpVersion) {
-        $develZip = "php-devel-pack-$PhpVersion-${pkgFlavor}Win32-vs17-x64.zip"
-        $phpZip = "php-$PhpVersion-${pkgFlavor}Win32-vs17-x64.zip"
-    } else {
-        # The version may carry a respin suffix (e.g. 8.4.27-1), so take the file names as listed.
-        $releases = Invoke-RestMethod -Uri 'https://windows.php.net/downloads/releases/releases.json' -UseBasicParsing
-        $build = $releases.$PhpXY."$Flavor-vs17-x64"
-        if (-not $build) { throw "No PHP $PhpXY $Flavor-vs17-x64 release found in releases.json (use -PhpVersion)" }
-        $PhpVersion = $releases.$PhpXY.version
-        $develZip = $build.devel_pack.path
-        $phpZip = $build.zip.path
-    }
-}
-if ($PhpVersion -and -not $PhpVersion.StartsWith("$PhpXY.")) { throw "-PhpVersion $PhpVersion is not PHP $PhpXY" }
-if (-not $DevelPack) {
-    $DevelPack = Get-PhpPackage $develZip
-    # The zip has one top directory (php-<ver>-devel-vs17-x64).
-    $DevelPack = (Get-ChildItem -Path $DevelPack -Recurse -Filter phpize.bat | Select-Object -First 1).DirectoryName
-}
-if (-not $PhpDir) {
-    $PhpDir = Get-PhpPackage $phpZip
-}
-if (-not $PhpSdk) {
-    $PhpSdk = Get-Package "$PhpSdkTag.zip" @("https://github.com/php/php-sdk-binary-tools/archive/refs/tags/$PhpSdkTag.zip")
-    # The zip has one top directory (php-sdk-binary-tools-<tag>).
-    $PhpSdk = (Get-ChildItem -Path $PhpSdk -Recurse -Filter phpsdk_version.bat | Select-Object -First 1).Directory.Parent.FullName
-}
-$sdkTools = (Join-Path $PhpSdk 'bin'), (Join-Path $PhpSdk 'msys2\usr\bin')
-foreach ($d in $sdkTools) { if (-not (Test-Path $d)) { throw "$d not found (PHP SDK: $PhpSdk)" } }
-# Appended so that the MSVC tools keep precedence.
-$env:PATH = "$env:PATH;$($sdkTools -join ';')"
-
-$phpize = Join-Path $DevelPack 'phpize.bat'
-$phpExe = Join-Path $PhpDir 'php.exe'
-if (-not (Test-Path $phpize)) { throw "phpize.bat not found in $DevelPack" }
-if (-not (Test-Path $phpExe)) { throw "php.exe not found in $PhpDir" }
-
-Build-Cci
-
-# Build the extension out of the source tree.
-New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
-Copy-Item (Join-Path $Root 'config.w32') $BuildDir
-Copy-Item (Join-Path $Root 'pdo_cubrid*.c'), (Join-Path $Root 'cubrid_driver*.c'),
-          (Join-Path $Root 'cubrid_statement*.c'), (Join-Path $Root 'php_pdo_cubrid*.h'),
-          (Join-Path $Root 'pdo_cubrid_version.h') $BuildDir
-Push-Location $BuildDir
 try {
-    Invoke-Checked $phpize @()
-    Invoke-Checked (Join-Path $BuildDir 'configure.bat') @("--with-pdo-cubrid=$CciOut")
-    Invoke-Checked nmake.exe @('/nologo')
+    if ($Clean) {
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $BuildDir, $CciBuild, $CciOut
+    }
+
+    Import-VsEnv
+
+    # PHP devel pack and binary
+    $pkgFlavor = if ($ThreadSafe) { '' } else { 'nts-' }
+    $develZip = $null
+    $phpZip = $null
+    if (-not $DevelPack -or -not $PhpDir) {
+        if ($PhpVersion) {
+            $develZip = "php-devel-pack-$PhpVersion-${pkgFlavor}Win32-vs17-x64.zip"
+            $phpZip = "php-$PhpVersion-${pkgFlavor}Win32-vs17-x64.zip"
+        } else {
+            # The version may carry a respin suffix (e.g. 8.4.27-1), so take the file names as listed.
+            $releases = Invoke-RestMethod -Uri 'https://windows.php.net/downloads/releases/releases.json' -UseBasicParsing
+            $build = $releases.$PhpXY."$Flavor-vs17-x64"
+            if (-not $build) { throw "No PHP $PhpXY $Flavor-vs17-x64 release found in releases.json (use -PhpVersion)" }
+            $PhpVersion = $releases.$PhpXY.version
+            $develZip = $build.devel_pack.path
+            $phpZip = $build.zip.path
+        }
+    }
+    if ($PhpVersion -and -not $PhpVersion.StartsWith("$PhpXY.")) { throw "-PhpVersion $PhpVersion is not PHP $PhpXY" }
+    if (-not $DevelPack) {
+        $DevelPack = Get-PhpPackage $develZip
+        # The zip has one top directory (php-<ver>-devel-vs17-x64).
+        $DevelPack = (Get-ChildItem -Path $DevelPack -Recurse -Filter phpize.bat | Select-Object -First 1).DirectoryName
+    }
+    if (-not $PhpDir) {
+        $PhpDir = Get-PhpPackage $phpZip
+    }
+    if (-not $PhpSdk) {
+        $PhpSdk = Get-Package "$PhpSdkTag.zip" @("https://github.com/php/php-sdk-binary-tools/archive/refs/tags/$PhpSdkTag.zip")
+        # The zip has one top directory (php-sdk-binary-tools-<tag>).
+        $PhpSdk = (Get-ChildItem -Path $PhpSdk -Recurse -Filter phpsdk_version.bat | Select-Object -First 1).Directory.Parent.FullName
+    }
+    $sdkTools = (Join-Path $PhpSdk 'bin'), (Join-Path $PhpSdk 'msys2\usr\bin')
+    foreach ($d in $sdkTools) { if (-not (Test-Path $d)) { throw "$d not found (PHP SDK: $PhpSdk)" } }
+    # Appended so that the MSVC tools keep precedence.
+    $env:PATH = "$env:PATH;$($sdkTools -join ';')"
+
+    $phpize = Join-Path $DevelPack 'phpize.bat'
+    $phpExe = Join-Path $PhpDir 'php.exe'
+    if (-not (Test-Path $phpize)) { throw "phpize.bat not found in $DevelPack" }
+    if (-not (Test-Path $phpExe)) { throw "php.exe not found in $PhpDir" }
+
+    Build-Cci
+
+    # Build the extension out of the source tree.
+    New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
+    Copy-Item (Join-Path $Root 'config.w32') $BuildDir
+    Copy-Item (Join-Path $Root 'pdo_cubrid*.c'), (Join-Path $Root 'cubrid_driver*.c'),
+              (Join-Path $Root 'cubrid_statement*.c'), (Join-Path $Root 'php_pdo_cubrid*.h'),
+              (Join-Path $Root 'pdo_cubrid_version.h') $BuildDir
+    Push-Location $BuildDir
+    try {
+        Invoke-Checked $phpize @()
+        Invoke-Checked (Join-Path $BuildDir 'configure.bat') @("--with-pdo-cubrid=$CciOut")
+        Invoke-Checked nmake.exe @('/nologo')
+    } finally {
+        Pop-Location
+    }
+
+    $dll = Get-ChildItem -Path $BuildDir -Recurse -Filter php_pdo_cubrid.dll |
+        Where-Object { $_.DirectoryName -notlike '*\modules' } |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $dll) { throw "php_pdo_cubrid.dll not found under $BuildDir" }
+
+    # php_pdo_cubrid.dll needs cascci.dll next to it (or in PATH).
+    $Modules = Join-Path $BuildDir 'modules'
+    New-Item -ItemType Directory -Force -Path $Modules | Out-Null
+    Copy-Item $dll.FullName $Modules
+    Copy-Item (Join-Path $CciOut 'bin\cascci.dll') $Modules
+    $ext = Join-Path $Modules 'php_pdo_cubrid.dll'
+
+    # Load check
+    $env:PATH = "$Modules;$env:PATH"
+    # No double quotes in the PHP code: Windows PowerShell 5.1 strips them when passing
+    # arguments to native programs (pdo_cubrid would become an undefined constant).
+    $loaded = & $phpExe -n -d "extension=$ext" -r "echo in_array('cubrid', PDO::getAvailableDrivers()) ? phpversion('pdo_cubrid') : '';"
+    if ($LASTEXITCODE -ne 0 -or -not $loaded) { throw "php_pdo_cubrid.dll does not load in $phpExe" }
+
+    # Used by tests_8x\run_tests.ps1
+    Set-Content -Path (Join-Path $BuildDir '.php_exe') -Value $phpExe
+
+    Write-Host ''
+    Write-Host "PHP     : $phpExe ($(& $phpExe -n -r 'echo PHP_VERSION;'), $Flavor)"
+    Write-Host "Module  : $ext (pdo_cubrid $loaded)"
+    Write-Host "Test    : .\tests_8x\run_tests.ps1 $Target$(if ($ThreadSafe) { ' -ThreadSafe' })"
 } finally {
-    Pop-Location
+    Restore-Env
 }
-
-$dll = Get-ChildItem -Path $BuildDir -Recurse -Filter php_pdo_cubrid.dll |
-    Where-Object { $_.DirectoryName -notlike '*\modules' } |
-    Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if (-not $dll) { throw "php_pdo_cubrid.dll not found under $BuildDir" }
-
-# php_pdo_cubrid.dll needs cascci.dll next to it (or in PATH).
-$Modules = Join-Path $BuildDir 'modules'
-New-Item -ItemType Directory -Force -Path $Modules | Out-Null
-Copy-Item $dll.FullName $Modules
-Copy-Item (Join-Path $CciOut 'bin\cascci.dll') $Modules
-$ext = Join-Path $Modules 'php_pdo_cubrid.dll'
-
-# Load check
-$env:PATH = "$Modules;$env:PATH"
-$loaded = & $phpExe -n -d "extension=$ext" -r 'echo in_array("cubrid", PDO::getAvailableDrivers()) ? phpversion("pdo_cubrid") : "";'
-if ($LASTEXITCODE -ne 0 -or -not $loaded) { throw "php_pdo_cubrid.dll does not load in $phpExe" }
-
-# Used by tests_8x\run_tests.ps1
-Set-Content -Path (Join-Path $BuildDir '.php_exe') -Value $phpExe
-
-Write-Host ''
-Write-Host "PHP     : $phpExe ($(& $phpExe -n -r 'echo PHP_VERSION;'), $Flavor)"
-Write-Host "Module  : $ext (pdo_cubrid $loaded)"
-Write-Host "Test    : .\tests_8x\run_tests.ps1 $Target$(if ($ThreadSafe) { ' -ThreadSafe' })"
