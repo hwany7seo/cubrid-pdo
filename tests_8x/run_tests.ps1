@@ -104,7 +104,7 @@ try {
         $phpCgi = Join-Path (Split-Path $PhpExe) 'php-cgi.exe'
         if (Test-Path $phpCgi) { $env:TEST_PHP_CGI_EXECUTABLE = $phpCgi }
         else { Remove-Item -ErrorAction SilentlyContinue env:TEST_PHP_CGI_EXECUTABLE }
-        & $PhpExe run-tests.php -q @phpOpts -p $PhpExe @Rest @targets
+        & $PhpExe run-tests.php -q @phpOpts -p $PhpExe @Rest @targets | Tee-Object -FilePath "run-tests_${phpVer}.log" -Encoding UTF8
         $exitCode = $LASTEXITCODE
     }
 } finally {
