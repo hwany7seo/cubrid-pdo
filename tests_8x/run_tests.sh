@@ -18,8 +18,8 @@
 
 cd "$(dirname "$0")"
 
-#PHP_BIN=$(command -v "${PHP_BIN:-php}") || { echo "[ERROR] php not found" >&2; exit 1; }
-PHP_BIN=~/php/8.3/bin/php
+PHP_BIN=$(command -v "${PHP_BIN:-php}") || { echo "[ERROR] php not found" >&2; exit 1; }
+
 php_ver=$("$PHP_BIN" -n -r 'echo PHP_MAJOR_VERSION, PHP_MINOR_VERSION;')
 CUBRID_EXT=${CUBRID_EXT:-../build_$php_ver/modules/pdo_cubrid.so}
 
@@ -59,4 +59,4 @@ targets=(.)
 [ $has_target -eq 1 ] && targets=()
 
 export NO_COLOR=1
-exec "$PHP_BIN" run-tests.php -q "${php_opts[@]}" -p "$PHP_BIN" "$@" "${targets[@]}"
+exec "$PHP_BIN" run-tests.php -q "${php_opts[@]}" -p "$PHP_BIN" "$@" "${targets[@]}" | tee run-tests_${php_ver}.log
