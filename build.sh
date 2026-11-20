@@ -2,7 +2,7 @@
 #
 # Build the CUBRID PDO driver out of the source tree.
 #
-#   ./build.sh <ver> [options]   ->  build_<ver>/modules/pdo_cubrid.so
+#   ./build.sh <ver> [options]   ->  build_linux/<ver>/modules/pdo_cubrid.so
 #       ver: 83, 84, 85 (PHP 8.3 or later)
 #
 # Options
@@ -15,7 +15,7 @@
 #   --clean             remove the build directory and build from scratch
 #
 # phpize/configure generate files in the directory they run in, so the
-# sources are copied into build_<ver>/ and the source tree stays clean.
+# sources are copied into build_linux/<ver>/ and the source tree stays clean.
 # cci-src is linked, so the CCI static library is built once and shared.
 # The target PHP must have PDO (static or pdo.so) and its headers.
 
@@ -84,7 +84,7 @@ if [ ! -f "$php_include/ext/pdo/php_pdo_driver.h" ]; then
     exit 1
 fi
 
-build_dir=$root_dir/build_$target
+build_dir=$root_dir/build_linux/$target
 if [ $clean -eq 1 ]; then
     rm -rf "$build_dir"
 fi

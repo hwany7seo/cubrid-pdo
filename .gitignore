@@ -1,4 +1,4 @@
-# out-of-tree builds made by build.sh / build_win.ps1
+# out-of-tree builds: build_linux/ (build.sh) and build_win/ (build_win.ps1)
 /build_*/
 # run-tests.php output of failed tests
 /tests_8x/*.diff

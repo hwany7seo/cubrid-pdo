@@ -87,12 +87,12 @@ tar xzf php_pdo_cubrid-&lt;version&gt;-src.tgz
 cd php_pdo_cubrid-&lt;version&gt;-src</code></pre>
 
 <h3>2.3 Building with build.sh</h3>
-<p><code>build.sh</code> builds the driver out of the source tree in <code>build_&lt;ver&gt;/</code>, so the source tree stays clean
+<p><code>build.sh</code> builds the driver out of the source tree in <code>build_linux/&lt;ver&gt;/</code>, so the source tree stays clean
 and several PHP versions can be built side by side. CCI is built once and shared.</p>
 <pre><code>./build.sh &lt;ver&gt; [--php-config PATH] [--install] [--clean]
     ver: 83, 84, 85
 
-./build.sh 84 --php-config /usr/bin/php-config      # -&gt; build_84/modules/pdo_cubrid.so
+./build.sh 84 --php-config /usr/bin/php-config      # -&gt; build_linux/84/modules/pdo_cubrid.so
 ./build.sh 85 --install                             # also install it and enable it in php.ini</code></pre>
 <table>
   <tr><th>Option</th><th>Description</th></tr>
@@ -156,7 +156,7 @@ Run <code>Get-Help .\build_win.ps1 -Detailed</code> for all options.</p>
 
 <h2 id="test">4. Testing</h2>
 <p>The tests need a running CUBRID server (a broker on port <code>33000</code> with <code>demodb</code>).
-Build the driver with <code>./build.sh &lt;ver&gt;</code> first; the test runners load <code>build_&lt;ver&gt;/modules/pdo_cubrid.so</code>
+Build the driver with <code>./build.sh &lt;ver&gt;</code> first; the test runners load <code>build_linux/&lt;ver&gt;/modules/pdo_cubrid.so</code>
 without reading <code>php.ini</code>.</p>
 <table>
   <tr><th>Directory</th><th>Runner</th><th>Description</th></tr>
