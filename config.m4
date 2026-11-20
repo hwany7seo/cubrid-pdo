@@ -5,7 +5,7 @@ dnl don't forget to call PHP_EXTENSION(cubrid)
 dnl If your extension references something external, use with:
 
 PHP_ARG_WITH(pdo-cubrid, for CUBRID support for PDO,
-[  --with-pdo-cubrid         PDO: CUBRID support.])
+[  --with-pdo-cubrid         PDO: CUBRID support.], yes)
 
 if test "$PHP_PDO_CUBRID" != "no"; then
 

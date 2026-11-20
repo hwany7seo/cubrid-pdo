@@ -49,7 +49,7 @@ zend_module_entry pdo_cubrid_module_entry = {
 	NULL,
 	NULL,
 	PHP_MINFO(pdo_cubrid),
-	"1.0.0",
+	PDO_CUBRID_VERSION,
 	STANDARD_MODULE_PROPERTIES
 };
 

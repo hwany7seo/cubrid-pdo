@@ -12,3 +12,6 @@
 
 #ignore
 .vscode/
+
+# release packages made by script/release.sh / script/release.ps1
+/script/release/

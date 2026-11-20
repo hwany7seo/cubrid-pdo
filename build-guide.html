@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CUBRID PDO Driver Build Guide</title>
+<style>
+  :root { --fg: #1f2328; --muted: #59636e; --bg: #ffffff; --code-bg: #f6f8fa; --border: #d1d9e0; --accent: #0969da; --note-bg: #ddf4ff; --warn-bg: #fff8c5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg: #e6edf3; --muted: #9198a1; --bg: #0d1117; --code-bg: #161b22; --border: #3d444d; --accent: #4493f8; --note-bg: #0c2d6b; --warn-bg: #3b2e00; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.9em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+  h2 { font-size: 1.45em; border-bottom: 1px solid var(--border); padding-bottom: .25em; margin-top: 2em; }
+  h3 { font-size: 1.15em; margin-top: 1.6em; }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-size: .9em; }
+  code { background: var(--code-bg); padding: .1em .35em; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; overflow-x: auto; line-height: 1.45; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); }
+  .note, .warn { border-radius: 6px; padding: 10px 14px; margin: 1em 0; }
+  .note { background: var(--note-bg); }
+  .warn { background: var(--warn-bg); }
+  .muted { color: var(--muted); }
+  nav ol { padding-left: 1.4em; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>CUBRID PDO Driver Build Guide</h1>
+<p class="muted">Source: <a href="https://github.com/CUBRID/cubrid-pdo">https://github.com/CUBRID/cubrid-pdo</a></p>
+
+<nav>
+<ol>
+  <li><a href="#overview">Overview</a></li>
+  <li><a href="#linux">Building on Linux</a></li>
+  <li><a href="#windows">Building on Windows</a></li>
+  <li><a href="#test">Testing</a></li>
+  <li><a href="#release">Making a release</a></li>
+</ol>
+</nav>
+
+<h2 id="overview">1. Overview</h2>
+<p>CUBRID PDO Driver (<code>pdo_cubrid</code>) is the official PDO driver (<code>new PDO("cubrid:...")</code>) for the CUBRID database.
+The CUBRID CCI library is included as the <code>cci-src</code> git submodule and is built together with the driver,
+so CUBRID does not need to be installed to build the driver.</p>
+
+<table>
+  <tr><th>Platform</th><th>PHP</th><th>Compiler</th><th>Module</th></tr>
+  <tr><td>Linux x86_64</td><td>8.3, 8.4, 8.5 (NTS, ZTS)</td><td>GCC</td><td><code>pdo_cubrid.so</code> (CCI and OpenSSL linked statically)</td></tr>
+  <tr><td>Windows x64</td><td>8.4, 8.5 (NTS, TS)</td><td>Visual Studio 2022 (vs17)</td><td><code>php_pdo_cubrid.dll</code> + <code>cascci.dll</code></td></tr>
+</table>
+<p>32-bit platforms and ARM64 are not supported. PHP 8.2 and earlier are not supported; use an earlier driver release for them.</p>
+<p class="note">The driver requires the PDO extension of PHP. PDO is built into most PHP builds; when it is a shared module (<code>pdo.so</code>), it must be loaded before <code>pdo_cubrid</code>.</p>
+<p>End users usually do not need to build the driver. See the CUBRID manual for installing it with PIE or from the release packages:
+<a href="https://www.cubrid.org/manual/en/11.4/api/pdo.html">https://www.cubrid.org/manual/en/11.4/api/pdo.html</a>.</p>
+
+<h2 id="linux">2. Building on Linux</h2>
+
+<h3>2.1 Requirements</h3>
+<table>
+  <tr><th>Item</th><th>Note</th></tr>
+  <tr><td>GCC / G++, make</td><td>GCC 8 or later is recommended (e.g. <code>gcc-toolset</code> / <code>devtoolset</code> on RHEL-compatible systems).</td></tr>
+  <tr><td>CMake</td><td>Used to build CCI (3.x recommended).</td></tr>
+  <tr><td>autoconf</td><td>Required by <code>phpize</code>.</td></tr>
+  <tr><td>PHP development files</td><td><code>phpize</code> and <code>php-config</code> of the target PHP, e.g. <code>php-devel</code> (RHEL) or <code>php8.x-dev</code> (Debian/Ubuntu). The PDO headers (<code>include/php/ext/pdo</code>) must be installed with them.</td></tr>
+  <tr><td>git</td><td>Only for building from the git repository. The release archive does not need git.</td></tr>
+</table>
+<p>Example (RHEL-compatible): <code>dnf install gcc gcc-c++ make cmake autoconf php-devel</code><br>
+Example (Debian/Ubuntu): <code>apt install build-essential cmake autoconf php8.4-dev</code></p>
+
+<h3>2.2 Getting the source</h3>
+<p>From the git repository (the <code>cci-src</code> submodule is required):</p>
+<pre><code>git clone --recursive https://github.com/CUBRID/cubrid-pdo.git
+cd cubrid-pdo
+# for an existing clone
+git submodule update --init</code></pre>
+<p>Or download the source release archive <code>php_pdo_cubrid-&lt;version&gt;-src.tgz</code> from
+<a href="https://github.com/CUBRID/cubrid-pdo/releases">GitHub Releases</a>, which already contains <code>cci-src</code>:</p>
+<pre><code>sha256sum -c php_pdo_cubrid-&lt;version&gt;-src.tgz.sha256
+tar xzf php_pdo_cubrid-&lt;version&gt;-src.tgz
+cd php_pdo_cubrid-&lt;version&gt;-src</code></pre>
+
+<h3>2.3 Building with build.sh</h3>
+<p><code>build.sh</code> builds the driver out of the source tree in <code>build_&lt;ver&gt;/</code>, so the source tree stays clean
+and several PHP versions can be built side by side. CCI is built once and shared.</p>
+<pre><code>./build.sh &lt;ver&gt; [--php-config PATH] [--install] [--clean]
+    ver: 83, 84, 85
+
+./build.sh 84 --php-config /usr/bin/php-config      # -&gt; build_84/modules/pdo_cubrid.so
+./build.sh 85 --install                             # also install it and enable it in php.ini</code></pre>
+<table>
+  <tr><th>Option</th><th>Description</th></tr>
+  <tr><td><code>--php-config PATH</code></td><td><code>php-config</code> of the target PHP. Default: <code>$PHP_HOME/&lt;x.y&gt;/bin/php-config</code> (<code>PHP_HOME=~/php</code>), otherwise <code>php-config</code> in <code>PATH</code> if its version matches.</td></tr>
+  <tr><td><code>--install</code></td><td>Run <code>make install</code> and add <code>extension=pdo_cubrid.so</code> (and <code>extension=pdo.so</code> when PDO is not loaded yet)<code></code> to the <code>php.ini</code> of the target PHP.</td></tr>
+  <tr><td><code>--clean</code></td><td>Remove the build directory and build from scratch.</td></tr>
+</table>
+
+<h3>2.4 Building with phpize</h3>
+<p>The standard PHP extension build also works (in the source tree):</p>
+<pre><code>phpize
+./configure --with-php-config=/usr/bin/php-config
+make
+sudo make install</code></pre>
+<p>The extension is enabled by default, so <code>--with-pdo-cubrid</code> is not needed. <code>configure</code> builds CCI
+(<code>cci-src/build_x86_64_release</code>) first, which takes a few minutes the first time.</p>
+
+<h3>2.5 Enabling the extension</h3>
+<p>Add the following to <code>php.ini</code>, or to a file in the additional ini directory
+(e.g. <code>/etc/php.d/pdo_cubrid.ini</code> or <code>/etc/php/8.4/mods-available/pdo_cubrid.ini</code>):</p>
+<pre><code>; only when PDO is a shared module (pdo.so) and not loaded yet
+; extension=pdo
+extension=pdo_cubrid</code></pre>
+<p>Check that it is loaded:</p>
+<pre><code>php -m | grep -i pdo_cubrid
+php --ri pdo_cubrid</code></pre>
+<p>Restart the web server or PHP-FPM after changing the configuration.</p>
+
+<h2 id="windows">3. Building on Windows</h2>
+
+<h3>3.1 Requirements</h3>
+<ul>
+  <li>Visual Studio 2022 with the "Desktop development with C++" workload (MSVC v143, CMake)</li>
+  <li>Git for Windows (the CCI CMake build uses <code>git</code> and <code>awk</code> of <code>Git\usr\bin</code>)</li>
+  <li>Windows PowerShell 5.1 or PowerShell 7</li>
+</ul>
+<p>The PHP binaries, the PHP devel packs and the PHP SDK binary tools are downloaded automatically by
+<code>build_win.ps1</code> into <code>build_win\downloads</code>, unless existing ones are given with
+<code>-PhpDir</code>, <code>-DevelPack</code> and <code>-PhpSdk</code>.</p>
+
+<h3>3.2 Building with build_win.ps1</h3>
+<pre><code>.\build_win.ps1 &lt;ver&gt; [-ThreadSafe] [-PhpVersion X.Y.Z] [-PhpDir DIR] [-DevelPack DIR] [-PhpSdk DIR] [-Clean]
+    ver: 84, 85
+
+.\build_win.ps1 84                      # PHP 8.4 NTS -&gt; build_win\84-nts\modules\php_pdo_cubrid.dll
+.\build_win.ps1 85 -ThreadSafe          # PHP 8.5 TS  -&gt; build_win\85-ts\modules\php_pdo_cubrid.dll
+.\build_win.ps1 84 -PhpVersion 8.4.14 -Clean</code></pre>
+<p>CCI is built once with CMake as <code>cascci.dll</code> (<code>build_win\cci</code>) and shared by all targets.
+<code>build_win\&lt;ver&gt;-&lt;nts|ts&gt;\modules</code> contains <code>php_pdo_cubrid.dll</code> and <code>cascci.dll</code>.
+Run <code>Get-Help .\build_win.ps1 -Detailed</code> for all options.</p>
+
+<h3>3.3 Installing the build</h3>
+<ol>
+  <li>Copy <code>php_pdo_cubrid.dll</code> to the <code>ext</code> directory of PHP (e.g. <code>C:\php\ext</code>).</li>
+  <li>Copy <code>cascci.dll</code> next to <code>php.exe</code> (e.g. <code>C:\php</code>) or to a directory in <code>PATH</code>.
+      Windows does not look for dependent DLLs in the <code>ext</code> directory.</li>
+  <li>Add <code>extension=pdo_cubrid</code> to <code>php.ini</code>.</li>
+  <li>The Microsoft Visual C++ 2015-2022 Redistributable (x64) is required; it is installed with the official PHP builds in most cases.</li>
+</ol>
+<p>PDO itself is built into <code>php8.dll</code> of the official Windows PHP builds, so only <code>pdo_cubrid</code> needs to be enabled.</p>
+
+<h2 id="test">4. Testing</h2>
+<p>The tests need a running CUBRID server (a broker on port <code>33000</code> with <code>demodb</code>).
+Build the driver with <code>./build.sh &lt;ver&gt;</code> first; the test runners load <code>build_&lt;ver&gt;/modules/pdo_cubrid.so</code>
+without reading <code>php.ini</code>.</p>
+<table>
+  <tr><th>Directory</th><th>Runner</th><th>Description</th></tr>
+  <tr><td><code>tests_8x</code></td><td><code>run_tests.sh</code> / <code>run_tests.ps1</code></td><td>PDO driver tests (<code>.phpt</code>, run-tests.php). The tests connect to <code>demodb</code> on <code>localhost:33000</code>.</td></tr>
+</table>
+<pre><code>cd tests_8x
+PHP_BIN=~/php/8.4/bin/php ./run_tests.sh</code></pre>
+
+<h2 id="release">5. Making a release</h2>
+<p>A release is published as a GitHub release of the tag <code>&lt;version&gt;</code> (without a <code>v</code> prefix),
+where <code>&lt;version&gt;</code> is <code>PDO_CUBRID_VERSION</code> in <code>pdo_cubrid_version.h</code>. The release assets follow the
+<a href="https://github.com/php/pie">PIE</a> naming conventions, so <code>pie install cubrid/pdo_cubrid</code> finds them;
+the same files are used for manual installation.</p>
+<table>
+  <tr><th>Asset</th><th>Made by</th><th>Used for</th></tr>
+  <tr><td><code>php_pdo_cubrid-&lt;version&gt;-src.tgz</code></td><td><code>script/release.sh</code></td><td>Linux: PIE (pre-packaged source), manual build</td></tr>
+  <tr><td><code>php_pdo_cubrid-&lt;version&gt;-&lt;8.4|8.5&gt;-&lt;nts|ts&gt;-vs17-x86_64.zip</code></td><td><code>script/release.ps1</code></td><td>Windows: PIE, manual installation</td></tr>
+  <tr><td><code>*.sha256</code></td><td>both scripts</td><td>SHA-256 checksum of each file (<code>sha256sum -c</code> format)</td></tr>
+</table>
+
+<h3>5.1 Linux source archive: script/release.sh</h3>
+<pre><code>script/release.sh [--ref REV] [--output DIR] [--check [PHP_CONFIG]]
+
+script/release.sh                                   # HEAD
+script/release.sh --ref &lt;version&gt; --check ~/php/8.4/bin/php-config</code></pre>
+<ul>
+  <li>The archive is made from a committed revision (HEAD by default) and the <code>cci-src</code> commit recorded in it;
+      uncommitted changes and build outputs are never packaged.</li>
+  <li>The top directory in the archive is <code>php_pdo_cubrid-&lt;version&gt;-src/</code>.</li>
+  <li>In the packaged <code>cci-src</code> (the cci-src repository itself is not changed):
+      <code>build.sh</code> does not stop when git is missing, <code>BUILD_NUMBER</code> holds the full CCI version
+      (e.g. <code>11.2.0.0040-9965aa8</code>), and <code>win/</code> is left out.</li>
+  <li><code>--check</code> extracts the archive into <code>script/release/check</code> and builds it with
+      <code>phpize; ./configure; make</code> as PIE does, then checks that the module loads.</li>
+  <li>Output: <code>script/release/</code> (ignored by git). The same directory is used by <code>script/release.ps1</code>.</li>
+</ul>
+
+<h3>5.2 Windows binaries: script/release.ps1</h3>
+<pre><code>.\script\release.ps1 [-Targets 84,85] [-Flavors nts,ts] [-PhpSdk DIR] [-OutputDir DIR] [-Clean]
+
+.\script\release.ps1                                # 8.4/8.5 x NTS/TS = 4 zips</code></pre>
+<p>Each target is built with <code>build_win.ps1</code>. Each zip contains:</p>
+<ul>
+  <li><code>php_pdo_cubrid-&lt;version&gt;-&lt;x.y&gt;-&lt;nts|ts&gt;-vs17-x86_64.dll</code>: the extension, named like the zip as PIE requires
+      (PIE installs it as <code>ext\php_pdo_cubrid.dll</code>; rename it when installing by hand)</li>
+  <li><code>.pdb</code> of the extension, when built</li>
+  <li><code>cascci.dll</code> (PIE copies it next to <code>php.exe</code>)</li>
+  <li><code>LICENSE</code></li>
+</ul>
+
+<h3>5.3 Publishing</h3>
+<ol>
+  <li>Update <code>PDO_CUBRID_VERSION</code> in <code>pdo_cubrid_version.h</code> and the release notes, and commit.</li>
+  <li>Tag the commit: <code>git tag &lt;version&gt;</code>, <code>git push origin &lt;version&gt;</code>.</li>
+  <li>Run <code>script/release.sh --ref &lt;version&gt; --check</code> on Linux and <code>script\release.ps1</code> on Windows (from the same tag).</li>
+  <li>Create a GitHub release for the tag and upload the <code>.tgz</code>, <code>.zip</code> and <code>.sha256</code> files of <code>script/release</code> including the <code>.sha256</code> files.</li>
+  <li>Packagist (<code>cubrid/pdo_cubrid</code>) picks up the new tag through the GitHub webhook. Check it with
+      <code>pie install cubrid/pdo_cubrid:&lt;version&gt;</code>.</li>
+</ol>
+<div class="note">
+  <p>To test a release before it is on Packagist (e.g. from a fork), add the repository to PIE:</p>
+  <pre><code>pie repository:add vcs https://github.com/&lt;user&gt;/cubrid-pdo
+pie install cubrid/pdo_cubrid:&lt;version&gt;
+pie repository:remove vcs https://github.com/&lt;user&gt;/cubrid-pdo</code></pre>
+  <p>An extracted source archive can also be installed with PIE without network access:</p>
+  <pre><code>pie repository:add path /path/to/php_pdo_cubrid-&lt;version&gt;-src
+pie install cubrid/pdo_cubrid:*@dev</code></pre>
+</div>
+<div class="warn">
+  <p>The source archive asset must be attached to the GitHub release. Without it, PIE falls back to the GitHub
+  source zip, which does not contain the <code>cci-src</code> submodule, and the build fails.</p>
+</div>
+
+</main>
+</body>
+</html>
